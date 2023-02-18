@@ -3,12 +3,11 @@ import sys
 from typing import List, Tuple, Union
 
 import numpy as np
+from typings import Location
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
-sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 from conf.game_conf import BOARD_COLUMN, BOARD_ROW  # noqa
-from utils.game_typing import Location  # noqa
 
 
 class Board:
@@ -35,7 +34,7 @@ class Board:
         for r in range(BOARD_ROW):
             if self.board[r, col] == 0:
                 return r
-        return -1  # 全ての行がplayer=1or2で埋まっている状態
+        return 99  # 全ての行がplayer=1or2で埋まっている状態
 
     def check_done_player(self, state: int) -> bool:
         """
@@ -46,7 +45,7 @@ class Board:
         Args:
             col (int): プレイヤーが選択した列
         """
-        if state == -1:
+        if state == 99:
             print(
                 "[WARNING] That column is already filled with pieces. Please select another column."
             )
@@ -142,7 +141,7 @@ def main() -> None:
         if turn % 2 == 0:
             player = 1
         else:
-            player = 2
+            player = -1
         done_playing = False
         while not done_playing:
             # Ask for player input
