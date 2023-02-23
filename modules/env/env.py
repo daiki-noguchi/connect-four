@@ -61,7 +61,6 @@ class ConnectFour:
         if do_wins:
             return do_wins, int(do_wins)
         if self.board.check_draw():  # draw
-            print("draw.")
             return True, 0
         if np.allclose(state, next_state):
             return False, 0

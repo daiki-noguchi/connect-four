@@ -49,6 +49,7 @@ class Coach:
     def __init__(self, env, agent, replay_buffer: ReplayBuffer, sync_interval: int) -> None:
         self.env = env
         self.agent = agent
+        self.gamma = 0.9
         self.replay_buffer = replay_buffer
         self.sync_interval = sync_interval
 
@@ -70,10 +71,11 @@ class Coach:
 
             if output.done:
                 # save (state, action, reward (v), next_state, player)
-                for ex in examples:
+                for i, ex in enumerate(reversed(examples)):  # The longer the match, the less rewarding.
                     # reward is +1 if player is winner, otherwise -1
                     # if it is draw, the reward of both player is 0
-                    ex.reward = output.reward if ex.player == player else -output.reward
+                    r = output.reward if ex.player == player else -output.reward
+                    ex.reward = r * self.gamma ** i
                 return examples
 
             state = deepcopy(output.next_state)
@@ -144,7 +146,7 @@ def main() -> None:
         agent = DQNAgent(DQNParams())
         replay_buffer = ReplayBuffer(buffer_size=10000, batch_size=32)
         coach = Coach(env, agent, replay_buffer, sync_interval=sync_interval)
-        past_agent = coach.agent
+        past_agent = deepcopy(coach.agent)
 
         for episode in range(num_episodes):
             coach.update(episode)
@@ -155,7 +157,6 @@ def main() -> None:
                 win_rate = win / num_games_for_eval
                 print(f"episode :{episode}, winning rate : {win_rate:.3f} ({win} / {num_games_for_eval})")
                 win_rate_list.append(win_rate)
-                past_agent = coach.agent
             
                 torch.save(coach.agent.qnet.state_dict(), str(output_dir / f'q_net_{episode}.pth'))
         
