@@ -3,25 +3,30 @@ import sys
 from typing import List, Tuple, Union
 
 import numpy as np
-from typings import Location
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
 
 from conf.game_conf import BOARD_COLUMN, BOARD_ROW  # noqa
+from modules.env.typings import Location
 
 
 class Board:
     def __init__(self, row: int, col: int) -> None:
         self.row = row
         self.col = col
-        self.board = self.create_board()
+        self.state = self.create_board()
 
     def create_board(self) -> np.ndarray:
         board = np.zeros((self.row, self.col))
         return board
 
-    def drop_piece(self, row: int, col: int, player: int) -> None:
-        self.board[row, col] = player
+    def drop_piece(self, col: int, player: int) -> bool:
+        row = self.get_next_open_row(col)
+        if self.check_done_player(row):
+            self.state[row, col] = player
+            return True
+        else:
+            return False
 
     def get_next_open_row(self, col: int) -> int:
         """
@@ -32,7 +37,7 @@ class Board:
             col (int): プレイヤーが選択した列
         """
         for r in range(BOARD_ROW):
-            if self.board[r, col] == 0:
+            if self.state[r, col] == 0:
                 return r
         return 99  # 全ての行がplayer=1or2で埋まっている状態
 
@@ -46,12 +51,16 @@ class Board:
             col (int): プレイヤーが選択した列
         """
         if state == 99:
-            print(
-                "[WARNING] That column is already filled with pieces. Please select another column."
-            )
+            # print(
+            #     "[WARNING] That column is already filled with pieces. Please select another column."
+            # )
             return False
         else:
             return True
+    
+    def check_is_valid_location(self, col: int) -> bool:
+        row = self.get_next_open_row(col)
+        return self.check_done_player(row)
 
     def check_winning_move(self, player: int) -> Tuple[bool, Union[List[Location], None]]:
         # Check horizontal locations for win
@@ -59,10 +68,10 @@ class Board:
             for r in range(BOARD_ROW):
                 if all(
                     [
-                        self.board[r, c] == player,
-                        self.board[r, c + 1] == player,
-                        self.board[r, c + 2] == player,
-                        self.board[r, c + 3] == player,
+                        self.state[r, c] == player,
+                        self.state[r, c + 1] == player,
+                        self.state[r, c + 2] == player,
+                        self.state[r, c + 3] == player,
                     ]
                 ):
                     return True, [
@@ -77,10 +86,10 @@ class Board:
             for r in range(BOARD_ROW - 3):
                 if all(
                     [
-                        self.board[r, c] == player,
-                        self.board[r + 1, c] == player,
-                        self.board[r + 2, c] == player,
-                        self.board[r + 3, c] == player,
+                        self.state[r, c] == player,
+                        self.state[r + 1, c] == player,
+                        self.state[r + 2, c] == player,
+                        self.state[r + 3, c] == player,
                     ]
                 ):
                     return True, [
@@ -95,10 +104,10 @@ class Board:
             for r in range(BOARD_ROW - 3):
                 if all(
                     [
-                        self.board[r, c] == player,
-                        self.board[r + 1, c + 1] == player,
-                        self.board[r + 2, c + 2] == player,
-                        self.board[r + 3, c + 3] == player,
+                        self.state[r, c] == player,
+                        self.state[r + 1, c + 1] == player,
+                        self.state[r + 2, c + 2] == player,
+                        self.state[r + 3, c + 3] == player,
                     ]
                 ):
                     return True, [
@@ -113,10 +122,10 @@ class Board:
             for r in range(3, BOARD_ROW):
                 if all(
                     [
-                        self.board[r, c] == player,
-                        self.board[r - 1, c + 1] == player,
-                        self.board[r - 2, c + 2] == player,
-                        self.board[r - 3, c + 3] == player,
+                        self.state[r, c] == player,
+                        self.state[r - 1, c + 1] == player,
+                        self.state[r - 2, c + 2] == player,
+                        self.state[r - 3, c + 3] == player,
                     ]
                 ):
                     return True, [
@@ -128,8 +137,14 @@ class Board:
 
         return False, None
 
+    def check_draw(self) -> bool:
+        return np.count_nonzero(self.state) == BOARD_COLUMN * BOARD_ROW
+
+    def reset(self) -> None:
+        self.state = self.create_board()
+
     def print_board(self) -> None:
-        print(np.flip(self.board, 0))
+        print(np.flip(self.state, 0))
 
 
 def main() -> None:
@@ -149,7 +164,7 @@ def main() -> None:
             row = board.get_next_open_row(col)
             done_playing = board.check_done_player(row)
         # Player 1 will drop a piece on the board
-        board.drop_piece(row, col, player=player)
+        board.drop_piece(col, player=player)
         do_wins, win_list = board.check_winning_move(player=player)
         if do_wins:
             print(f"Player {player} Wins !!")
