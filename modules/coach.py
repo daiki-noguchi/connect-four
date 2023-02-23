@@ -82,8 +82,6 @@ class Coach:
     
     def update(self, episode: int) -> None:
         examples_one_episode = self.execute_one_episode()
-        # print("=========================episode done=========================")
-        # pprint(examples_one_episode)
         for ex in examples_one_episode:
             self.replay_buffer.add(ex)
         
@@ -114,9 +112,9 @@ def vs(latest: DQNAgent, past: DQNAgent, num_games: int) -> int:
         1: latest,
         -1: past,
     }
-    cur_player = 1
     for _ in range(num_games):
-        state = env.reset()
+        state = deepcopy(env.reset())
+        cur_player = 1
         done = False
         while not done:
             cur_agent = agent_dict[cur_player]
@@ -124,7 +122,7 @@ def vs(latest: DQNAgent, past: DQNAgent, num_games: int) -> int:
             if output.done:
                 num_win += 1 if cur_player == get_key_from_value(agent_dict, latest) else 0
 
-            state = output.next_state
+            state = deepcopy(output.next_state)
             cur_player = output.next_player
             done = output.done
 
@@ -151,7 +149,7 @@ def main() -> None:
         for episode in range(num_episodes):
             coach.update(episode)
             
-            if episode % 100 == 0:
+            if episode % 1000 == 0:
                 # current vs before
                 win = vs(latest=coach.agent, past=past_agent, num_games=num_games_for_eval)
                 win_rate = win / num_games_for_eval

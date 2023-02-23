@@ -46,7 +46,7 @@ class QNet(nn.Module):
         x = self._one_hot(x)
         batch_size = x.size()[0]
         x = self.conv_block(x.float())
-        x = x.view(batch_size, -1)
+        x = x.reshape(batch_size, -1)
         x = self.fc_block(x)
         x = F.softmax(x, dim=1)
         return x
