@@ -1,9 +1,8 @@
-import copy
-from dataclasses import dataclass
-from collections import deque
-import sys
 import os
-import random
+import sys
+from copy import deepcopy
+from dataclasses import dataclass
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -14,6 +13,7 @@ from torch import Tensor
 sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
 
 from conf.game_conf import BOARD_COLUMN  # noqa
+from modules.typings import BoardType  # noqa
 
 
 @dataclass
@@ -50,7 +50,7 @@ class QNet(nn.Module):
         x = self.fc_block(x)
         x = F.softmax(x, dim=1)
         return x
-    
+
     def _one_hot(self, x: Tensor) -> Tensor:
         x = torch.where(x < 0, 2, x).to(torch.long)
         x = nn.functional.one_hot(x, num_classes=3)
@@ -60,7 +60,7 @@ class QNet(nn.Module):
 
 
 class DQNAgent:
-    def __init__(self,  params: DQNParams) -> None:
+    def __init__(self, params: DQNParams) -> None:
         self.gamma = params.gamma
         self.lr = params.lr
         self.epsilon = params.epsilon
@@ -72,15 +72,25 @@ class DQNAgent:
         self.qnet_target = QNet(self.action_size)
         self.optimizer = optim.Adam(self.qnet.parameters(), lr=self.lr)
 
-    def get_action(self, state):
+    def get_action(self, state: BoardType) -> int:
+        """e-greedy法によって行動選択する
+
+        Args:
+            state (BoardType): 現在のゲームボードの状態
+
+        Returns:
+            int: 行動
+        """
         if np.random.rand() < self.epsilon:
             return np.random.choice(self.action_size)
         else:
-            state = torch.tensor(state)
+            state = torch.from_numpy(deepcopy(state))
             qs = self.qnet(state)
-            return qs.argmax().item()
+            return int(qs.argmax().item())
 
-    def update(self, state: Tensor, action: Tensor, reward: Tensor, next_state: Tensor, done: Tensor) -> None:
+    def update(
+        self, state: Tensor, action: Tensor, reward: Tensor, next_state: Tensor, done: Tensor
+    ) -> None:
         qs = self.qnet(state)
         q = qs[np.arange(len(action)), action]
 
@@ -99,8 +109,8 @@ class DQNAgent:
 
     def sync_qnet(self) -> None:
         self.qnet_target.load_state_dict(self.qnet.state_dict())
-    
-    def play(self, state: np.ndarray) -> int:
+
+    def play(self, state: BoardType) -> int:
         state = torch.tensor(state[np.newaxis, :])
         qs = self.qnet(state)
-        return qs.argmax().item()
+        return int(qs.argmax().item())

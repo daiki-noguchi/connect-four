@@ -7,7 +7,8 @@ import numpy as np
 sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
 
 from conf.game_conf import BOARD_COLUMN, BOARD_ROW  # noqa
-from modules.env.typings import Location
+from modules.env.typings import Location  # noqa
+from modules.typings import BoardType  # noqa
 
 
 class Board:
@@ -16,8 +17,8 @@ class Board:
         self.col = col
         self.state = self.create_board()
 
-    def create_board(self) -> np.ndarray:
-        board = np.zeros((self.row, self.col))
+    def create_board(self) -> BoardType:
+        board = np.zeros((self.row, self.col), dtype=np.float32)
         return board
 
     def drop_piece(self, col: int, player: int) -> bool:
@@ -57,7 +58,7 @@ class Board:
             return False
         else:
             return True
-    
+
     def check_is_valid_location(self, col: int) -> bool:
         row = self.get_next_open_row(col)
         return self.check_done_player(row)
