@@ -9,8 +9,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
 
 from conf.game_conf import BOARD_COLUMN, BOARD_ROW  # noqa
 from modules.env.game import Board  # noqa
-from modules.env.typings import STEP_OUTPUT  # noqa
-from modules.typings import BoardType  # noqa
+from modules.typings import STEP_OUTPUT, BoardType  # noqa
 
 
 class ConnectFour:

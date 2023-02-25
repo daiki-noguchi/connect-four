@@ -8,8 +8,7 @@ import numpy as np
 import torch
 from agent.dqn import DQNAgent, DQNParams
 from env.env import ConnectFour
-from env.typings import STEP_OUTPUT
-from typings import BoardType, Example
+from typings import STEP_OUTPUT, BoardType, Example
 from utils.replay_buffer import ReplayBuffer
 from utils.utils import plot_total_reward
 
@@ -137,6 +136,7 @@ def main() -> None:
     output_dir = Path(f"outputs/{datetime.now().strftime('%Y%m%d/%H%M%S')}")
     output_dir.mkdir(exist_ok=True, parents=True)
     for i in range(200):
+        (output_dir / f"{i}").mkdir(exist_ok=True, parents=True)
         win_rate_list = []
 
         num_episodes = 100000

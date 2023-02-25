@@ -7,8 +7,7 @@ import numpy as np
 sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
 
 from conf.game_conf import BOARD_COLUMN, BOARD_ROW  # noqa
-from modules.env.typings import Location  # noqa
-from modules.typings import BoardType  # noqa
+from modules.typings import BoardType, Location  # noqa
 
 
 class Board:
