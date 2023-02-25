@@ -14,6 +14,7 @@ class Example:
     done: bool
     reward: float = 0
     winning_player: int = 0
+    delta: float = 0
 
 
 @dataclass

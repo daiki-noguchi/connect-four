@@ -51,6 +51,21 @@ class Coach:
         self.replay_buffer = replay_buffer
         self.sync_interval = sync_interval
 
+    def get_delta(self, example: Example) -> float:
+        """予測誤差(TDターゲット - self.agent.qvnet(state))を求める
+
+        Args:
+            example (Example): 現在の状態、プレイヤー、行動、次の状態、などを保持
+
+        Returns:
+            float: 予測誤差. prioritized_experience_replayで、予測誤差が大きいほど優先されてバッチとして選ばれて学習される
+        """
+        state, action, reward, next_state, _, _, done = self.agent.to_tensor([example])
+        t = self.agent.get_target(reward, next_state, done).detach().item()
+        qs, _ = self.agent.qvnet(state)
+        q = qs[np.arange(len(action)), action].detach().item()
+        return float(abs(t - q))
+
     def execute_one_episode(self) -> List[Example]:
         examples: List[Example] = []
         state = deepcopy(self.env.reset())
@@ -77,6 +92,7 @@ class Coach:
                     r = output.reward if ex.player == player else -output.reward
                     ex.reward = r * self.gamma**i
                     ex.winning_player = player
+                    ex.delta = self.get_delta(ex)
                 return examples
 
             state = deepcopy(output.next_state)
@@ -146,6 +162,7 @@ def main() -> None:
         num_episodes = 100000
         sync_interval = 100
         num_games_for_eval = 100
+        vs_interval = 1000
 
         env = ConnectFour()
         agent = DQNAgent(DQNParams())
@@ -157,7 +174,7 @@ def main() -> None:
         for episode in range(num_episodes):
             loss = coach.update(episode)
 
-            if episode % 1000 == 0:
+            if episode % vs_interval == 0:
                 loss_list.append(loss)
                 # current vs before
                 win = vs(latest=coach.agent, past=past_agent, num_games=num_games_for_eval)

@@ -1,7 +1,8 @@
+from typing import Literal
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import Literal
 from torch import Tensor
 
 LayerNormDataFormat = Literal["channels_last", "channels_first"]
