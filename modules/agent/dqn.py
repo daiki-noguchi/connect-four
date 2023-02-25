@@ -26,7 +26,7 @@ class DQNParams:
     epsilon: float = 0.1
     double_dqn: bool = True
     buffer_size: int = 10000
-    batch_size: int = 2
+    batch_size: int = 32
 
 
 class QVNet(nn.Module):
