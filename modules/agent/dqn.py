@@ -2,22 +2,20 @@ import os
 import sys
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import List, Literal, Tuple, Union
+from typing import List, Tuple, Union
 
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import torch.optim as optim
-from timm.models.layers import DropPath
+from models.convnext import ConvNeXtBlock
+from models.utils import LayerNorm
 from torch import Tensor
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
 
 from conf.game_conf import BOARD_COLUMN  # noqa
 from modules.typings import BoardType, Example  # noqa
-
-LayerNormDataFormat = Literal["channels_last", "channels_first"]
 
 
 @dataclass
@@ -29,85 +27,6 @@ class DQNParams:
     double_dqn: bool = True
     buffer_size: int = 10000
     batch_size: int = 32
-
-
-class LayerNorm(nn.Module):
-    r"""LayerNorm that supports two data formats: channels_last (default) or channels_first.
-    The ordering of the dimensions in the inputs. channels_last corresponds to inputs with
-    shape (batch_size, height, width, channels) while channels_first corresponds to inputs
-    with shape (batch_size, channels, height, width).
-    """
-
-    def __init__(
-        self,
-        normalized_shape: int,
-        eps: float = 1e-6,
-        data_format: LayerNormDataFormat = "channels_last",
-    ) -> None:
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(normalized_shape))
-        self.bias = nn.Parameter(torch.zeros(normalized_shape))
-        self.eps = eps
-        self.data_format = data_format
-        if self.data_format not in ["channels_last", "channels_first"]:
-            raise NotImplementedError
-        self.normalized_shape = (normalized_shape,)
-
-    def forward(self, x: Tensor) -> Tensor:
-        if self.data_format == "channels_last":
-            return F.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
-        elif self.data_format == "channels_first":
-            u = x.mean(1, keepdim=True)
-            s = (x - u).pow(2).mean(1, keepdim=True)
-            x = (x - u) / torch.sqrt(s + self.eps)
-            x = self.weight[:, None, None] * x + self.bias[:, None, None]
-            return x
-
-
-class ConvNeXtBlock(nn.Module):
-    r"""ConvNeXt Block. There are two equivalent implementations:
-    (1) DwConv -> LayerNorm (channels_first) -> 1x1 Conv -> GELU -> 1x1 Conv; all in (N, C, H, W)
-    (2) DwConv -> Permute to (N, H, W, C); LayerNorm (channels_last) -> Linear -> GELU -> Linear; Permute back
-    We use (2) as we find it slightly faster in PyTorch
-
-    Args:
-        dim (int): Number of input channels.
-        drop_path (float): Stochastic depth rate. Default: 0.0
-        layer_scale_init_value (float): Init value for Layer Scale. Default: 1e-6.
-    """
-
-    def __init__(
-        self, dim: int, drop_path: float = 0.0, layer_scale_init_value: float = 1e-6
-    ) -> None:
-        super().__init__()
-        self.dwconv = nn.Conv2d(dim, dim, kernel_size=3, padding=1, groups=dim)  # depthwise conv
-        self.norm = LayerNorm(dim, eps=1e-6)
-        self.pwconv1 = nn.Linear(
-            dim, 4 * dim
-        )  # pointwise/1x1 convs, implemented with linear layers
-        self.act = nn.GELU()
-        self.pwconv2 = nn.Linear(4 * dim, dim)
-        self.gamma = (
-            nn.Parameter(layer_scale_init_value * torch.ones((dim)), requires_grad=True)
-            if layer_scale_init_value > 0
-            else None
-        )
-        self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
-
-    def forward(self, x: Tensor) -> Tensor:
-        input = x
-        x = self.dwconv(x)
-        x = x.permute(0, 2, 3, 1)  # (N, C, H, W) -> (N, H, W, C)
-        x = self.norm(x)
-        x = self.pwconv1(x)
-        x = self.act(x)
-        x = self.pwconv2(x)
-        if self.gamma is not None:
-            x = self.gamma * x
-        x = x.permute(0, 3, 1, 2)  # (N, H, W, C) -> (N, C, H, W)
-
-        x = input + self.drop_path(x)
-        return x
 
 
 class QVNet(nn.Module):
@@ -287,7 +206,7 @@ class DQNAgent:
         target: Tensor = reward + (1 - done.to(torch.int)) * self.gamma * next_q
         return target
 
-    def to_tensor(self, data: Example) -> Tuple[Tensor, ...]:
+    def to_tensor(self, data: List[Example]) -> Tuple[Tensor, ...]:
         states = torch.tensor(np.stack([x.state for x in data]))
         actions = torch.tensor(np.array([x.action for x in data]), dtype=torch.long)
         rewards = torch.tensor(np.array([x.reward for x in data]), dtype=torch.float32)
@@ -299,7 +218,7 @@ class DQNAgent:
         done_list = torch.tensor(np.stack([x.done for x in data]))
         return states, actions, rewards, next_states, players, winning_players, done_list
 
-    def update(self, example: Example) -> float:
+    def update(self, example: List[Example]) -> float:
         state, action, reward, next_state, player, winning_player, done = self.to_tensor(example)
         qs, v = self.qvnet(state)  # qs.size(): (N, 7) / vs.size(): (N, 1)
         q = qs[np.arange(len(action)), action]
@@ -326,16 +245,16 @@ class DQNAgent:
 
 def main() -> None:
     agent = DQNAgent(DQNParams())
-    state = np.zeros((1, 6, 7))
+    state = np.zeros((6, 7))
     print(state)
-    action: np.ndarray = np.array([[2]])
+    action = 2
+    print(action)
     next_state = deepcopy(state)
-    print(action[0, 0])
-    next_state[0, 0, action[0, 0]] = 1
+    next_state[0, action] = 1
     print(next_state)
 
-    reward: np.ndarray = np.array([[1]])
-    done: np.ndarray = np.array([[True]])
+    reward = 1
+    done = True
     example = Example(
         state=state,
         action=action,
@@ -345,7 +264,8 @@ def main() -> None:
         reward=reward,
         winning_player=1,
     )
-    agent.update(example)
+    loss = agent.update([example])
+    print(loss)
 
 
 if __name__ == "__main__":
