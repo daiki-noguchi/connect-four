@@ -1,8 +1,7 @@
-import pickle
 from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Union
 
 import numpy as np
 import torch
@@ -10,7 +9,7 @@ from agent.dqn import DQNAgent, DQNParams
 from env.env import ConnectFour
 from typings import STEP_OUTPUT, BoardType, Example
 from utils.replay_buffer import ReplayBuffer
-from utils.utils import plot_total_reward
+from utils.utils import plot_mean_loss, plot_total_reward
 
 
 def get_key_from_value(d: Dict[int, DQNAgent], val: DQNAgent) -> int:
@@ -77,24 +76,27 @@ class Coach:
                     # if it is draw, the reward of both player is 0
                     r = output.reward if ex.player == player else -output.reward
                     ex.reward = r * self.gamma**i
+                    ex.winning_player = player
                 return examples
 
             state = deepcopy(output.next_state)
             player = output.next_player
 
-    def update(self, episode: int) -> None:
+    def update(self, episode: int) -> Union[float, None]:
         examples_one_episode = self.execute_one_episode()
         for ex in examples_one_episode:
             self.replay_buffer.add(ex)
 
         if len(self.replay_buffer) < self.agent.batch_size:
-            return
+            return None
 
-        state, action, reward, next_state, player, done = self.replay_buffer.get_batch()
-        self.agent.update(state, action, reward, next_state, done)
+        examples = self.replay_buffer.get_batch()
+        loss = self.agent.update(examples)
 
         if episode % self.sync_interval == 0:
-            self.agent.sync_qnet()
+            self.agent.sync_qvnet()
+
+        return loss
 
 
 def vs(latest: DQNAgent, past: DQNAgent, num_games: int) -> int:
@@ -133,11 +135,13 @@ def vs(latest: DQNAgent, past: DQNAgent, num_games: int) -> int:
 
 def main() -> None:
     mean_win_rates = []
+    mean_loss = []
     output_dir = Path(f"outputs/{datetime.now().strftime('%Y%m%d/%H%M%S')}")
     output_dir.mkdir(exist_ok=True, parents=True)
-    for i in range(200):
+    for i in range(10):
         (output_dir / f"{i}").mkdir(exist_ok=True, parents=True)
         win_rate_list = []
+        loss_list = []
 
         num_episodes = 100000
         sync_interval = 100
@@ -145,14 +149,16 @@ def main() -> None:
 
         env = ConnectFour()
         agent = DQNAgent(DQNParams())
-        replay_buffer = ReplayBuffer(buffer_size=10000, batch_size=32)
+        replay_buffer = ReplayBuffer(buffer_size=10000, batch_size=agent.batch_size)
         coach = Coach(env, agent, replay_buffer, sync_interval=sync_interval)
         past_agent = deepcopy(coach.agent)
 
+        print(f"=============={i}: {num_episodes} episode==================")
         for episode in range(num_episodes):
-            coach.update(episode)
+            loss = coach.update(episode)
 
             if episode % 1000 == 0:
+                loss_list.append(loss)
                 # current vs before
                 win = vs(latest=coach.agent, past=past_agent, num_games=num_games_for_eval)
                 win_rate = win / num_games_for_eval
@@ -162,15 +168,14 @@ def main() -> None:
                 win_rate_list.append(win_rate)
 
                 torch.save(
-                    coach.agent.qnet.state_dict(), str(output_dir / f"{i}" / f"q_net_{episode}.pth")
+                    coach.agent.qvnet.state_dict(),
+                    str(output_dir / f"{i}" / f"q_net_{episode}.pth"),
                 )
 
         mean_win_rates.append(win_rate_list)
-
+        mean_loss.append(loss_list)
         plot_total_reward(np.mean(mean_win_rates, axis=0), output_dir)
-
-        with open(str(output_dir / "mean_win_rates.pkl"), "w") as f:
-            pickle.dump(mean_win_rates, f)  # type: ignore
+        plot_mean_loss(np.mean(mean_loss, axis=0), output_dir)
 
 
 if __name__ == "__main__":

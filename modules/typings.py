@@ -13,6 +13,7 @@ class Example:
     player: int
     done: bool
     reward: float = 0
+    winning_player: int = 0
 
 
 @dataclass
