@@ -106,7 +106,7 @@ class DQNAgent:
         else:
             target = self.get_default_target(reward, next_state, done)
         return target
-    
+
     def get_default_target(self, reward: Tensor, next_state: Tensor, done: Tensor) -> Tensor:
         """通常のDQNのTDターゲットを返す
 
@@ -123,8 +123,9 @@ class DQNAgent:
         next_qs = self.qnet_target(next_state)
         next_q = next_qs.max(1)[0]
         next_q.detach()
-        return reward + (1 - done.to(torch.int)) * self.gamma * next_q
-    
+        target: Tensor = reward + (1 - done.to(torch.int)) * self.gamma * next_q
+        return target
+
     def get_ddqn_target(self, reward: Tensor, next_state: Tensor, done: Tensor) -> Tensor:
         """過大評価を解消するTDターゲットを返す
         qnet_target(next_state)は誤差が含まれる推定値であり、この最大値を取ると、真のQ関数より過大評価されてしまう
@@ -146,7 +147,8 @@ class DQNAgent:
         next_qs = self.qnet_target(next_state)
         next_q = torch.tensor([qi[a] for qi, a in zip(next_qs, q_max_action)])
         next_q.detach()
-        return reward + (1 - done.to(torch.int)) * self.gamma * next_q
+        target: Tensor = reward + (1 - done.to(torch.int)) * self.gamma * next_q
+        return target
 
     def update(
         self, state: Tensor, action: Tensor, reward: Tensor, next_state: Tensor, done: Tensor
@@ -171,7 +173,7 @@ class DQNAgent:
         return int(qs.argmax().item())
 
 
-def main():
+def main() -> None:
     agent = DQNAgent(DQNParams())
     state = torch.zeros(1, 6, 7)
     print(state)
@@ -180,7 +182,7 @@ def main():
     print(action[0, 0])
     next_state[0, 0, action[0, 0]] = 1
     print(next_state)
-    
+
     reward = torch.tensor([[1]])
     done = torch.tensor([[True]])
     agent.update(state, action, reward, next_state, done)
