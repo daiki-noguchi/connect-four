@@ -26,6 +26,7 @@ class DQNParams:
     action_size: int = BOARD_COLUMN
     lr: float = 0.0005
     epsilon: float = 0.1
+    double_dqn: bool = True
     buffer_size: int = 10000
     batch_size: int = 32
 
@@ -204,6 +205,7 @@ class DQNAgent:
         self.buffer_size = params.buffer_size
         self.batch_size = params.batch_size
         self.action_size = params.action_size
+        self.double_dqn = params.double_dqn
 
         self.qvnet = QVNet(self.action_size, dims=[96], depths=[3])
         self.qvnet_target = QVNet(self.action_size, dims=[96], depths=[3])
@@ -225,6 +227,66 @@ class DQNAgent:
             qs, _ = self.qvnet(state)
             return int(qs.argmax().item())
 
+    def get_target(self, reward: Tensor, next_state: Tensor, done: Tensor) -> Tensor:
+        """TDターゲットを返す
+
+        Args:
+            reward (Tensor): 報酬
+            next_state (Tensor): 次のゲームボードの状態
+            done (Tensor): エピソードが終了したか
+
+        Returns:
+            Tensor: TDターゲット
+        """
+        if self.double_dqn:
+            target = self.get_ddqn_target(reward, next_state, done)
+        else:
+            target = self.get_default_target(reward, next_state, done)
+        return target
+
+    def get_default_target(self, reward: Tensor, next_state: Tensor, done: Tensor) -> Tensor:
+        """通常のDQNのTDターゲットを返す
+
+        TDターゲット = reward + gamma * max_a qnet_target(next_state)
+
+        Args:
+            reward (Tensor): 報酬
+            next_state (Tensor): 次のゲームボードの状態
+            done (Tensor): エピソードが終了したか
+
+        Returns:
+            Tensor: TDターゲット
+        """
+        next_qs, _ = self.qvnet_target(next_state)
+        next_q = next_qs.max(1)[0]
+        next_q.detach()
+        target: Tensor = reward + (1 - done.to(torch.int)) * self.gamma * next_q
+        return target
+
+    def get_ddqn_target(self, reward: Tensor, next_state: Tensor, done: Tensor) -> Tensor:
+        """過大評価を解消するTDターゲットを返す
+        qnet_target(next_state)は誤差が含まれる推定値であり、この最大値を取ると、真のQ関数より過大評価されてしまう
+        Double DQNでは、真のQ関数qnet(next_state)が最大となる行動を選び、
+        その行動を取ったときのqnet_target(next_state)を使ってTDターゲットを作る
+
+        TDターゲット = reward + gamma * qnet_target(next_state, a=argmax_a qnet(next_state))
+
+        Args:
+            reward (Tensor): 報酬
+            next_state (Tensor): 次のゲームボードの状態
+            done (Tensor): エピソードが終了したか
+
+        Returns:
+            Tensor: TDターゲット
+        """
+        qs, _ = self.qvnet(next_state)
+        q_max_action = qs.argmax(axis=1)
+        next_qs, _ = self.qvnet_target(next_state)
+        next_q = torch.tensor([qi[a] for qi, a in zip(next_qs, q_max_action)])
+        next_q.detach()
+        target: Tensor = reward + (1 - done.to(torch.int)) * self.gamma * next_q
+        return target
+
     def to_tensor(self, data: Example) -> Tuple[Tensor, ...]:
         states = torch.tensor(np.stack([x.state for x in data]))
         actions = torch.tensor(np.array([x.action for x in data]), dtype=torch.long)
@@ -241,12 +303,7 @@ class DQNAgent:
         state, action, reward, next_state, player, winning_player, done = self.to_tensor(example)
         qs, v = self.qvnet(state)  # qs.size(): (N, 7) / vs.size(): (N, 1)
         q = qs[np.arange(len(action)), action]
-
-        next_qs, _ = self.qvnet_target(next_state)
-        next_q = next_qs.max(1)[0]
-
-        next_q.detach()
-        target = reward + (1 - done.to(torch.int)) * self.gamma * next_q
+        target = self.get_target(reward, next_state, done)
 
         loss_fn = nn.MSELoss()
         loss_q = loss_fn(q, target)
@@ -265,3 +322,31 @@ class DQNAgent:
         state = torch.tensor(state[np.newaxis, :])
         qs, _ = self.qvnet(state)
         return int(qs.argmax().item())
+
+
+def main() -> None:
+    agent = DQNAgent(DQNParams())
+    state = np.zeros((1, 6, 7))
+    print(state)
+    action: np.ndarray = np.array([[2]])
+    next_state = deepcopy(state)
+    print(action[0, 0])
+    next_state[0, 0, action[0, 0]] = 1
+    print(next_state)
+
+    reward: np.ndarray = np.array([[1]])
+    done: np.ndarray = np.array([[True]])
+    example = Example(
+        state=state,
+        action=action,
+        next_state=next_state,
+        player=1,
+        done=done,
+        reward=reward,
+        winning_player=1,
+    )
+    agent.update(example)
+
+
+if __name__ == "__main__":
+    main()
