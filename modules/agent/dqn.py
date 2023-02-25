@@ -326,17 +326,26 @@ class DQNAgent:
 
 def main() -> None:
     agent = DQNAgent(DQNParams())
-    state = torch.zeros(1, 6, 7)
+    state = np.zeros((1, 6, 7))
     print(state)
-    action = torch.tensor([[2]])
+    action: np.ndarray = np.array([[2]])
     next_state = deepcopy(state)
     print(action[0, 0])
     next_state[0, 0, action[0, 0]] = 1
     print(next_state)
 
-    reward = torch.tensor([[1]])
-    done = torch.tensor([[True]])
-    agent.update(state, action, reward, next_state, done)
+    reward: np.ndarray = np.array([[1]])
+    done: np.ndarray = np.array([[True]])
+    example = Example(
+        state=state,
+        action=action,
+        next_state=next_state,
+        player=1,
+        done=done,
+        reward=reward,
+        winning_player=1,
+    )
+    agent.update(example)
 
 
 if __name__ == "__main__":
