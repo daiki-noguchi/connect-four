@@ -1,9 +1,8 @@
 import torch
 import torch.nn as nn
+from agent.models.utils import LayerNorm
 from timm.models.layers import DropPath
 from torch import Tensor
-
-from models.utils import LayerNorm
 
 
 class ConvNeXtBlock(nn.Module):

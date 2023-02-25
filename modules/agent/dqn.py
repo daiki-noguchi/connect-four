@@ -8,8 +8,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from models.convnext import ConvNeXtBlock
-from models.utils import LayerNorm
+from agent.models.convnext import ConvNeXtBlock
+from agent.models.utils import LayerNorm
 from torch import Tensor
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
@@ -26,7 +26,7 @@ class DQNParams:
     epsilon: float = 0.1
     double_dqn: bool = True
     buffer_size: int = 10000
-    batch_size: int = 32
+    batch_size: int = 2
 
 
 class QVNet(nn.Module):
