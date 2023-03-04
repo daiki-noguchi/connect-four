@@ -7,7 +7,7 @@
 - [x] DQN (base agent)
 - [x] Dobule DQN
 - [x] Prioritized Experience Replay
-- [ ] Dueling DQN
+- [x] Dueling DQN
 - [ ] Multi step Q learning
 - [ ] Distributional DQN
 - [ ] Noisy DQN
