@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 import numpy as np
+import torch
 
 BoardType = np.ndarray  # shape: BOARD_ROW, BOARD_COLUMN / dtype: np.float32
 
@@ -15,6 +16,17 @@ class Example:
     reward: float = 0
     winning_player: int = 0
     delta: float = 0
+
+
+@dataclass
+class TensorExamples:
+    state: torch.Tensor
+    action: torch.Tensor
+    reward: torch.Tensor
+    next_state: torch.Tensor
+    player: torch.Tensor
+    winning_player: torch.Tensor
+    done: torch.Tensor
 
 
 @dataclass

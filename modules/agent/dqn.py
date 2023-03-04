@@ -15,7 +15,7 @@ from torch import Tensor
 sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
 
 from conf.game_conf import BOARD_COLUMN  # noqa
-from modules.typings import BoardType, Example  # noqa
+from modules.typings import BoardType, Example, TensorExamples  # noqa
 
 
 @dataclass
@@ -206,7 +206,7 @@ class DQNAgent:
         target: Tensor = reward + (1 - done.to(torch.int)) * self.gamma * next_q
         return target
 
-    def to_tensor(self, data: List[Example]) -> Tuple[Tensor, ...]:
+    def to_tensor(self, data: List[Example]) -> TensorExamples:
         states = torch.tensor(np.stack([x.state for x in data]))
         actions = torch.tensor(np.array([x.action for x in data]), dtype=torch.long)
         rewards = torch.tensor(np.array([x.reward for x in data]), dtype=torch.float32)
@@ -216,17 +216,29 @@ class DQNAgent:
             np.array([x.winning_player for x in data]), dtype=torch.float32
         )
         done_list = torch.tensor(np.stack([x.done for x in data]))
-        return states, actions, rewards, next_states, players, winning_players, done_list
+        return TensorExamples(
+            state=states,
+            action=actions,
+            reward=rewards,
+            next_state=next_states,
+            player=players,
+            winning_player=winning_players,
+            done=done_list,
+        )
 
     def update(self, example: List[Example]) -> float:
-        state, action, reward, next_state, player, winning_player, done = self.to_tensor(example)
-        qs, v = self.qvnet(state)  # qs.size(): (N, 7) / vs.size(): (N, 1)
-        q = qs[np.arange(len(action)), action]
-        target = self.get_target(reward, next_state, done)
+        tensor_examples = self.to_tensor(example)
+        qs, v = self.qvnet(tensor_examples.state)  # qs.size(): (N, 7) / vs.size(): (N, 1)
+        q = qs[np.arange(len(tensor_examples.action)), tensor_examples.action]
+        target = self.get_target(
+            tensor_examples.reward,
+            tensor_examples.next_state,
+            tensor_examples.done
+        )
 
         loss_fn = nn.MSELoss()
         loss_q = loss_fn(q, target)
-        loss_v = loss_fn(v.flatten(), winning_player)
+        loss_v = loss_fn(v.flatten(), tensor_examples.winning_player)
         loss = loss_q + loss_v
 
         self.optimizer.zero_grad()

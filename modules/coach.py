@@ -60,10 +60,14 @@ class Coach:
         Returns:
             float: 予測誤差. prioritized_experience_replayで、予測誤差が大きいほど優先されてバッチとして選ばれて学習される
         """
-        state, action, reward, next_state, _, _, done = self.agent.to_tensor([example])
-        t = self.agent.get_target(reward, next_state, done).detach().item()
-        qs, _ = self.agent.qvnet(state)
-        q = qs[np.arange(len(action)), action].detach().item()
+        tensor_examples = self.agent.to_tensor([example])
+        t = self.agent.get_target(
+            tensor_examples.reward,
+            tensor_examples.next_state,
+            tensor_examples.done
+        ).detach().item()
+        qs, _ = self.agent.qvnet(tensor_examples.state)
+        q = qs[np.arange(len(tensor_examples.action)), tensor_examples.action].detach().item()
         return float(abs(t - q))
 
     def execute_one_episode(self) -> List[Example]:
