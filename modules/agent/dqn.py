@@ -25,6 +25,7 @@ class DQNParams:
     lr: float = 0.0005
     epsilon: float = 0.1
     double_dqn: bool = True
+    dueling: bool = True
     buffer_size: int = 10000
     batch_size: int = 32
 
@@ -48,8 +49,11 @@ class QVNet(nn.Module):
         dims: Union[List[int], None] = None,
         depths: Union[List[int], None] = None,
         layer_scale_init_value: float = 1e-6,
+        dueling: bool=True,
     ) -> None:
         super().__init__()
+        self.action_size = action_size
+        self.dueling = dueling
         if dims is None:
             dims = [96, 192, 384, 768]
         if depths is None:
@@ -83,10 +87,19 @@ class QVNet(nn.Module):
             self.stages.append(stage)
             cur += depth
         self.norm = nn.LayerNorm(dims[-1], eps=1e-6)  # final norm layer
-        self.q_head = nn.Sequential(
-            nn.Linear(dims[-1], action_size),
-            nn.Softmax(dim=1),
-        )
+        if self.dueling:
+            self.dueling_qv_head = nn.Sequential(
+                nn.Linear(dims[-1], dims[-1]),
+                nn.Linear(dims[-1], 1),
+            )
+            self.dueling_qa_head = nn.Sequential(
+                nn.Linear(dims[-1], dims[-1]),
+                nn.Linear(dims[-1], action_size),
+            )
+        else:
+            self.q_head = nn.Sequential(
+                nn.Linear(dims[-1], action_size),
+            )
         self.v_head = nn.Sequential(
             nn.Linear(dims[-1], 1),
             nn.Tanh(),
@@ -104,7 +117,13 @@ class QVNet(nn.Module):
     def forward(self, x: Tensor) -> Tuple[Tensor, Tensor]:
         x = self._one_hot(x).float()
         x = self.forward_features(x)
-        q = self.q_head(x)
+        if self.dueling:
+            q_v = self.dueling_qv_head(x)
+            q_a = self.dueling_qa_head(x)
+            mean_q_a = q_a.mean(1).unsqueeze(1)  # 各アクションに対するAdvantageの平均
+            q = q_v.expand(-1, self.action_size) + (q_a - mean_q_a.expand(-1, self.action_size))
+        else:
+            q = self.q_head(x)
         v = self.v_head(x)
         return q, v
 
@@ -125,9 +144,10 @@ class DQNAgent:
         self.batch_size = params.batch_size
         self.action_size = params.action_size
         self.double_dqn = params.double_dqn
+        self.dueling = params.dueling
 
-        self.qvnet = QVNet(self.action_size, dims=[96], depths=[3])
-        self.qvnet_target = QVNet(self.action_size, dims=[96], depths=[3])
+        self.qvnet = QVNet(self.action_size, dims=[96], depths=[3], dueling=self.dueling)
+        self.qvnet_target = QVNet(self.action_size, dims=[96], depths=[3], dueling=self.dueling)
         self.optimizer = optim.Adam(self.qvnet.parameters(), lr=self.lr)
 
     def get_action(self, state: BoardType) -> int:
