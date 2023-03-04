@@ -88,13 +88,13 @@ class Coach:
 
             if output.done:
                 # save (state, action, reward (v), next_state, player)
-                for i, ex in enumerate(
-                    reversed(examples)
-                ):  # The longer the match, the less rewarding.
-                    # reward is +1 if player is winner, otherwise -1
-                    # if it is draw, the reward of both player is 0
-                    r = output.reward if ex.player == player else -output.reward
-                    ex.reward = r * self.gamma**i
+                for i, ex in enumerate(reversed(examples)):
+                    if i in [0, 1]:
+                        # 各プレイヤーの最後のプレイに報酬を与える
+                        # 勝者の報酬は+1、敗者の報酬は-1、ドローの場合は両プレイヤーともに0
+                        ex.reward = output.reward if ex.player == player else -output.reward
+                    else:
+                        ex.reward = 0
                     ex.winning_player = player
                     ex.delta = self.get_delta(ex)
                 return examples
