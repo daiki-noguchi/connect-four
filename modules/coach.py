@@ -61,43 +61,80 @@ class Coach:
             float: 予測誤差. prioritized_experience_replayで、予測誤差が大きいほど優先されてバッチとして選ばれて学習される
         """
         tensor_examples = self.agent.to_tensor([example])
-        t = self.agent.get_target(
-            tensor_examples.reward,
-            tensor_examples.next_state,
-            tensor_examples.done
-        ).detach().item()
+        t = (
+            self.agent.get_target(
+                tensor_examples.reward, tensor_examples.next_state, tensor_examples.done
+            )
+            .detach()
+            .item()
+        )
         qs, _ = self.agent.qvnet(tensor_examples.state)
         q = qs[np.arange(len(tensor_examples.action)), tensor_examples.action].detach().item()
         return float(abs(t - q))
 
     def execute_one_episode(self) -> List[Example]:
-        examples: List[Example] = []
         state = deepcopy(self.env.reset())
         player = 1
 
+        state_action_list: Dict[int, List[Tuple[BoardType, int]]] = {
+            1: [],
+            -1: [],
+        }
         while True:
             action, output = env_step(self.env, self.agent, state, player)
-            ex = Example(
-                state=state,
-                action=action,
-                next_state=deepcopy(output.next_state),
-                player=player,
-                done=output.done,
-            )
-            examples.append(ex)
-
+            if player == 1:
+                state_action_list[1].append((state, action))
+            else:
+                state_action_list[-1].append((state, action))
             if output.done:
-                # save (state, action, reward (v), next_state, player)
-                for i, ex in enumerate(
-                    reversed(examples)
-                ):  # The longer the match, the less rewarding.
-                    # reward is +1 if player is winner, otherwise -1
-                    # if it is draw, the reward of both player is 0
-                    r = output.reward if ex.player == player else -output.reward
-                    ex.reward = r * self.gamma**i
-                    ex.winning_player = player
-                    ex.delta = self.get_delta(ex)
-                return examples
+                winning_player = player
+                examples_by_player: Dict[int, List[Example]] = {
+                    1: [],
+                    -1: [],
+                }
+                for player, _list in state_action_list.items():
+                    for i, (state, action) in enumerate(_list):
+                        if i == len(_list) - 1:  # 最後の状態
+                            # next_stateの注意点
+                            # done=Trueであれば、TDターゲットの計算に使われないため、勝者の最後の状態のnext_stateはどんな値を入れてもいい
+                            # 敗者の最後の状態のnext_stateは勝敗が決着した状態（connect4では、4つのコインが揃った状態）
+                            # よって、ここでは最後の状態のnext_stateは勝者でも敗者でも同じ値を入れる
+                            next_state = output.next_state
+                            # 試合終了フラグ: 勝つ一手を打った瞬間に試合終了
+                            done = winning_player == player
+                            # reward: 各プレイヤーの最後のプレイに報酬を与える
+                            # 勝者の報酬は+1、敗者の報酬は-1、ドローの場合は両プレイヤーともに0
+                            reward = output.reward if player == winning_player else -output.reward
+                        else:
+                            next_state = _list[i + 1][0]  # 一つ目の要素がstate
+                            done = False
+                            reward = 0
+                        examples_by_player[player].append(
+                            Example(
+                                state=state,
+                                action=action,
+                                next_state=next_state,
+                                player=player,
+                                done=done,
+                                reward=reward,
+                                winning_player=winning_player,
+                            )
+                        )
+                    # get reward and next_state for multi-step learning
+                    for i, ex in enumerate(
+                        examples_by_player[player][: -self.agent.multi_step_td_target + 1]
+                    ):
+                        next_i = i + self.agent.multi_step_td_target - 1
+                        ex.next_state = examples_by_player[player][next_i].next_state  # n個先の状態
+                        total_reward = 0.0  # n個先まで行動したときに実際に得られた収益（割引付き報酬合計）
+                        for power in range(self.agent.multi_step_td_target):
+                            total_reward += (
+                                self.agent.gamma**power
+                                * examples_by_player[player][i + power].reward
+                            )
+                        ex.reward = total_reward
+                        ex.delta = self.get_delta(ex)
+                return examples_by_player[1] + examples_by_player[-1]
 
             state = deepcopy(output.next_state)
             player = output.next_player

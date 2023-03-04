@@ -8,7 +8,7 @@
 - [x] Dobule DQN
 - [x] Prioritized Experience Replay
 - [x] Dueling DQN
-- [ ] Multi step Q learning
+- [x] Multi step Q learning
 - [ ] Distributional DQN
 - [ ] Noisy DQN
 
