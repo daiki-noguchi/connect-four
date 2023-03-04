@@ -28,6 +28,7 @@ class DQNParams:
     dueling: bool = True
     buffer_size: int = 10000
     batch_size: int = 32
+    multi_step_td_target: int = 2  # multi step learningのステップ数。1の時、TD法
 
 
 class QVNet(nn.Module):
@@ -49,7 +50,7 @@ class QVNet(nn.Module):
         dims: Union[List[int], None] = None,
         depths: Union[List[int], None] = None,
         layer_scale_init_value: float = 1e-6,
-        dueling: bool=True,
+        dueling: bool = True,
     ) -> None:
         super().__init__()
         self.action_size = action_size
@@ -145,6 +146,7 @@ class DQNAgent:
         self.action_size = params.action_size
         self.double_dqn = params.double_dqn
         self.dueling = params.dueling
+        self.multi_step_td_target = params.multi_step_td_target
 
         self.qvnet = QVNet(self.action_size, dims=[96], depths=[3], dueling=self.dueling)
         self.qvnet_target = QVNet(self.action_size, dims=[96], depths=[3], dueling=self.dueling)
@@ -183,6 +185,11 @@ class DQNAgent:
             target = self.get_default_target(reward, next_state, done)
         return target
 
+    def get_td_target(self, reward: Tensor, done: Tensor, next_q: Tensor) -> Tensor:
+        gamma = self.gamma**self.multi_step_td_target
+        td_target: Tensor = reward + (1 - done.to(torch.int)) * gamma * next_q
+        return td_target
+
     def get_default_target(self, reward: Tensor, next_state: Tensor, done: Tensor) -> Tensor:
         """通常のDQNのTDターゲットを返す
 
@@ -199,7 +206,7 @@ class DQNAgent:
         next_qs, _ = self.qvnet_target(next_state)
         next_q = next_qs.max(1)[0]
         next_q.detach()
-        target: Tensor = reward + (1 - done.to(torch.int)) * self.gamma * next_q
+        target = self.get_td_target(reward, done, next_q)
         return target
 
     def get_ddqn_target(self, reward: Tensor, next_state: Tensor, done: Tensor) -> Tensor:
@@ -223,7 +230,7 @@ class DQNAgent:
         next_qs, _ = self.qvnet_target(next_state)
         next_q = torch.tensor([qi[a] for qi, a in zip(next_qs, q_max_action)])
         next_q.detach()
-        target: Tensor = reward + (1 - done.to(torch.int)) * self.gamma * next_q
+        target = self.get_td_target(reward, done, next_q)
         return target
 
     def to_tensor(self, data: List[Example]) -> TensorExamples:
@@ -251,9 +258,7 @@ class DQNAgent:
         qs, v = self.qvnet(tensor_examples.state)  # qs.size(): (N, 7) / vs.size(): (N, 1)
         q = qs[np.arange(len(tensor_examples.action)), tensor_examples.action]
         target = self.get_target(
-            tensor_examples.reward,
-            tensor_examples.next_state,
-            tensor_examples.done
+            tensor_examples.reward, tensor_examples.next_state, tensor_examples.done
         )
 
         loss_fn = nn.MSELoss()
