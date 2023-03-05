@@ -253,6 +253,19 @@ class DQNAgent:
             done=done_list,
         )
 
+    def get_loss_q(self, q: Tensor, target: Tensor) -> Tensor:
+        loss_fn = nn.MSELoss()
+        loss_q = loss_fn(q, target)
+        return loss_q
+
+    def get_loss_v(self, v: Tensor, target: Tensor) -> Tensor:
+        loss_fn = nn.MSELoss()
+        loss_q = loss_fn(v, target)
+        return loss_q
+
+    def get_loss(self, loss_q: Tensor, loss_v: Tensor) -> Tensor:
+        return loss_q + loss_v
+
     def update(self, example: List[Example]) -> float:
         tensor_examples = self.to_tensor(example)
         qs, v = self.qvnet(tensor_examples.state)  # qs.size(): (N, 7) / vs.size(): (N, 1)
@@ -261,10 +274,9 @@ class DQNAgent:
             tensor_examples.reward, tensor_examples.next_state, tensor_examples.done
         )
 
-        loss_fn = nn.MSELoss()
-        loss_q = loss_fn(q, target)
-        loss_v = loss_fn(v.flatten(), tensor_examples.winning_player)
-        loss = loss_q + loss_v
+        loss_q = self.get_loss_q(q, target)
+        loss_v = self.get_loss_v(v.flatten(), tensor_examples.winning_player)
+        loss = self.get_loss(loss_q, loss_v)
 
         self.optimizer.zero_grad()
         loss.backward()
