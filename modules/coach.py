@@ -8,6 +8,7 @@ import torch
 from agent.dqn import DQNAgent, DQNParams
 from env.env import ConnectFour
 from typings import STEP_OUTPUT, BoardType, Example
+from utils.model_utils import evaluate_quantile_at_action
 from utils.replay_buffer import ReplayBuffer
 from utils.utils import plot_mean_loss, plot_total_reward
 
@@ -61,16 +62,18 @@ class Coach:
             float: 予測誤差. prioritized_experience_replayで、予測誤差が大きいほど優先されてバッチとして選ばれて学習される
         """
         tensor_examples = self.agent.to_tensor([example])
-        t = (
-            self.agent.get_target(
+        with torch.no_grad():
+            qs, _ = self.agent.qvnet(tensor_examples.state)
+
+        # Calculate quantile values of current states and actions at taus.
+        q = evaluate_quantile_at_action(qs, tensor_examples.action)
+        assert q.shape == (self.agent.batch_size, self.agent.num_taus, 1)
+        with torch.no_grad():
+            t = self.agent.get_target(
                 tensor_examples.reward, tensor_examples.next_state, tensor_examples.done
             )
-            .detach()
-            .item()
-        )
-        qs, _ = self.agent.qvnet(tensor_examples.state)
-        q = qs[np.arange(len(tensor_examples.action)), tensor_examples.action].detach().item()
-        return float(abs(t - q))
+        assert t.shape == (self.agent.batch_size, 1, self.agent.num_taus)
+        return float((t - q).detach().abs().sum(dim=1).mean(dim=1, keepdim=True).mean().item())
 
     def execute_one_episode(self) -> List[Example]:
         state = deepcopy(self.env.reset())
@@ -140,7 +143,10 @@ class Coach:
             player = output.next_player
 
     def update(self, episode: int) -> Union[float, None]:
+        batch_size = self.agent.batch_size
+        self.agent.batch_size = 1
         examples_one_episode = self.execute_one_episode()
+        self.agent.batch_size = batch_size
         for ex in examples_one_episode:
             self.replay_buffer.add(ex)
 
