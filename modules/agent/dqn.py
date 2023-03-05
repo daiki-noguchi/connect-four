@@ -255,13 +255,13 @@ class DQNAgent:
 
     def get_loss_q(self, q: Tensor, target: Tensor) -> Tensor:
         loss_fn = nn.MSELoss()
-        loss_q = loss_fn(q, target)
-        return loss_q
+        loss = loss_fn(q, target)
+        return loss
 
     def get_loss_v(self, v: Tensor, target: Tensor) -> Tensor:
         loss_fn = nn.MSELoss()
-        loss_q = loss_fn(v, target)
-        return loss_q
+        loss = loss_fn(v, target)
+        return loss
 
     def get_loss(self, loss_q: Tensor, loss_v: Tensor) -> Tensor:
         return loss_q + loss_v
